@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tenor Search Viewer</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center justify-start min-h-screen p-4">
+<h1 class="text-2xl font-bold mb-4">Tenor Search Viewer</h1>
+
+<!-- Search controls -->
+<div class="flex flex-col sm:flex-row gap-2 mb-4 items-center">
+  <input id="searchTerm" type="text" placeholder="Search terms separated by commas..."
+         class="px-3 py-2 rounded text-black w-64">
+  <select id="category" class="px-3 py-2 rounded text-black">
+    <option value="all">All</option>
+    <option value="gifs">GIFs</option>
+    <option value="stickers">Stickers</option>
+    <option value="memes">Memes</option>
+  </select>
+  <div class="flex flex-col items-center">
+    <label for="count" class="text-sm">Results per load: <span id="countVal">1</span></label>
+    <input id="count" type="range" min="1" max="10" value="1" class="w-32">
+  </div>
+  <button id="searchBtn" class="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded">Search</button>
+  <button id="infoBtn" class="bg-gray-500 hover:bg-gray-600 px-3 py-2 rounded">Info</button>
+</div>
+
+<!-- Search terms display -->
+<div id="termsDisplay" class="flex gap-4 flex-wrap mb-4"></div>
+
+<!-- Results -->
+<div id="result" class="flex flex-col gap-8 w-full items-center"></div>
+
+<!-- Info Modal -->
+<div id="infoModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden">
+  <div class="bg-white text-black p-6 rounded shadow-lg max-w-md">
+    <h2 class="text-xl font-bold mb-2">About Tenor Search</h2>
+    <p class="mb-2">
+      This tool fetches results from <a href="https://tenor.com" target="_blank" class="text-blue-600">Tenor</a> by scraping their search pages.
+    </p>
+    <ul class="list-disc ml-5 mb-2 text-sm">
+      <li>No official API key is used.</li>
+      <li>Searches are proxied via <code>api.allorigins.win</code> to bypass CORS.</li>
+      <li>Tenor may limit results if used too frequently.</li>
+      <li>For production, use <a href="https://tenor.com/gifapi" target="_blank" class="text-blue-600">official API</a> with a key.</li>
+    </ul>
+    <button id="closeInfo" class="bg-blue-500 text-white px-4 py-2 rounded">Close</button>
+  </div>
+</div>
+
+<script>
+const searchBtn = document.getElementById("searchBtn");
+const searchTerm = document.getElementById("searchTerm");
+const category = document.getElementById("category");
+const count = document.getElementById("count");
+const countVal = document.getElementById("countVal");
+const result = document.getElementById("result");
+const termsDisplay = document.getElementById("termsDisplay");
+const infoBtn = document.getElementById("infoBtn");
+const infoModal = document.getElementById("infoModal");
+const closeInfo = document.getElementById("closeInfo");
+
+let termData = {}; // Stores results and indices per term
+
+// Slider label
+count.addEventListener("input", () => countVal.textContent = count.value);
+
+// Info modal
+infoBtn.addEventListener("click", () => infoModal.classList.remove("hidden"));
+closeInfo.addEventListener("click", () => infoModal.classList.add("hidden"));
+
+// Normalize URL
+function normalizeUrl(url) {
+  return url.replace(/_[0-9]+x[0-9]+\.(gif|mp4|png|webp)/, ".$1").split("?")[0];
+}
+
+// Append next N items for a term
+function appendResults(term) {
+  const container = termData[term].container;
+  const allMedia = termData[term].media;
+  let idx = termData[term].index;
+  const n = parseInt(count.value);
+  const end = Math.min(idx + n, allMedia.length);
+
+  for (let i = idx; i < end; i++) {
+    const item = allMedia[i];
+    let el;
+    if (item.mp4) {
+      el = document.createElement("video");
+      el.src = item.mp4;
+      el.autoplay = true;
+      el.loop = true;
+      el.muted = true;
+      el.playsInline = true;
+      el.controls = false;
+    } else if (item.gif) {
+      el = document.createElement("img");
+      el.src = item.gif;
+      el.loading = "eager";
+    } else if (item.webp) {
+      el = document.createElement("img");
+      el.src = item.webp;
+      el.loading = "eager";
+    } else if (item.png) {
+      el = document.createElement("img");
+      el.src = item.png;
+      el.loading = "eager";
+    }
+    el.className = "rounded shadow-lg max-h-[200px]";
+    container.appendChild(el);
+  }
+  termData[term].index = end;
+
+  // Show Load More if needed
+  const btn = termData[term].loadBtn;
+  btn.style.display = end < allMedia.length ? "block" : "none";
+}
+
+// Search click
+searchBtn.addEventListener("click", async () => {
+  const query = searchTerm.value.trim();
+  const cat = category.value;
+
+  if (!query) {
+    result.innerHTML = "<p class='text-red-400'>Please enter at least one search term.</p>";
+    return;
+  }
+
+  const terms = query.split(",").map(t => t.trim()).filter(t => t.length > 0);
+  termsDisplay.innerHTML = "";
+  result.innerHTML = "";
+  termData = {};
+
+  for (const term of terms) {
+    // Display the term
+    const termLabel = document.createElement("span");
+    termLabel.textContent = term;
+    termLabel.className = "text-lg font-bold bg-gray-700 px-2 py-1 rounded";
+    termsDisplay.appendChild(termLabel);
+
+    // Create container for results
+    const container = document.createElement("div");
+    container.className = "flex flex-wrap gap-4";
+    result.appendChild(container);
+
+    // Create Load More button
+    const loadBtn = document.createElement("button");
+    loadBtn.textContent = "Load More";
+    loadBtn.className = "bg-green-500 hover:bg-green-600 px-4 py-2 rounded mt-2 mb-4";
+    loadBtn.style.display = "none";
+    loadBtn.addEventListener("click", () => appendResults(term));
+    result.appendChild(loadBtn);
+
+    termData[term] = {media: [], index:0, container, loadBtn};
+
+    // Fetch data
+    const url = `https://tenor.com/search/${encodeURIComponent(term)}-gifs${cat !== "all" ? "?format="+cat : ""}`;
+    try {
+      const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+      const data = await res.json();
+      const html = data.contents;
+
+      const matches = html.match(/https:\/\/media\.tenor\.com\/[^"]+\.(gif|mp4|png|webp)/g) || [];
+      const mediaMap = new Map();
+
+      for (const url of matches) {
+        const norm = normalizeUrl(url);
+        if (!mediaMap.has(norm)) mediaMap.set(norm, {});
+        const item = mediaMap.get(norm);
+        if (url.endsWith(".gif")) item.gif = url;
+        else if (url.endsWith(".mp4")) item.mp4 = url;
+        else if (url.endsWith(".webp")) item.webp = url;
+        else if (url.endsWith(".png")) item.png = url;
+      }
+
+      termData[term].media = Array.from(mediaMap.values());
+      appendResults(term);
+
+    } catch (err) {
+      console.error(err);
+      container.innerHTML = "<p class='text-red-400'>Error fetching from Tenor.</p>";
+    }
+  }
+});
+</script>
+</body>
+</html>
