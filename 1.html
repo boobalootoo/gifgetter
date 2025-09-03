@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tenor Search Viewer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center justify-center min-h-screen p-4">
+  <h1 class="text-2xl font-bold mb-4">Tenor Search Viewer</h1>
+
+  <!-- Search controls -->
+  <div class="flex gap-2 mb-4">
+    <input id="searchTerm" type="text" placeholder="Search term..."
+           class="px-3 py-2 rounded text-black w-64">
+    <select id="category" class="px-3 py-2 rounded text-black">
+      <option value="all">All</option>
+      <option value="gifs">GIFs</option>
+      <option value="stickers">Stickers</option>
+      <option value="memes">Memes</option>
+    </select>
+    <button id="searchBtn"
+            class="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded">
+      Search
+    </button>
+  </div>
+
+  <!-- Results -->
+  <div id="result" class="mt-6 text-center"></div>
+
+  <script>
+    const searchBtn = document.getElementById("searchBtn");
+    const searchTerm = document.getElementById("searchTerm");
+    const category = document.getElementById("category");
+    const result = document.getElementById("result");
+
+    searchBtn.addEventListener("click", async () => {
+      const query = searchTerm.value.trim();
+      const cat = category.value;
+
+      if (!query) {
+        result.innerHTML = "<p class='text-red-400'>Please enter a search term.</p>";
+        return;
+      }
+
+      // Build Tenor search URL
+      let url = `https://tenor.com/search/${encodeURIComponent(query)}-gifs`;
+      if (cat !== "all") url += `?format=${cat}`;
+
+      try {
+        // Fetch raw HTML from Tenor
+        const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+        const html = data.contents;
+
+        // Extract the first GIF/Sticker/Meme URL
+        const match = html.match(/https:\/\/media.tenor.com\/[^"]+\.gif/);
+        if (match) {
+          result.innerHTML = `<img src="${match[0]}" alt="${query}" class="rounded shadow-lg max-h-[400px]">`;
+        } else {
+          result.innerHTML = "<p class='text-yellow-400'>No results found.</p>";
+        }
+      } catch (err) {
+        console.error(err);
+        result.innerHTML = "<p class='text-red-400'>Error fetching from Tenor.</p>";
+      }
+    });
+  </script>
+</body>
+</html>
